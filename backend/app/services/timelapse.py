@@ -41,6 +41,7 @@ def render_frame_gee(
     used both for a single index snapshot and as one frame of a
     timelapse sequence.
     """
+    import matplotlib.patches as mpatches
     import matplotlib.pyplot as plt
     from geemap import cartoee
 
@@ -52,7 +53,16 @@ def render_frame_gee(
     cartoee.add_scale_bar_lite(ax, length=scale_km, xy=(0.05, 0.05), linewidth=3, fontsize=10, color="black", unit="km")
 
     if legend_dict:
-        cartoee.add_legend(ax, legend_dict=legend_dict, loc="lower right", fontsize=9)
+        # The installed geemap version's cartoee.add_legend() takes
+        # `legend_elements` (a list of matplotlib legend handles), not a
+        # `legend_dict` -- passing legend_dict falls through **kwargs
+        # straight into ax.legend(), which doesn't recognize it and raises
+        # TypeError. Build the handles ourselves from the label->color dict.
+        legend_elements = [
+            mpatches.Patch(facecolor=color, edgecolor="black", label=label)
+            for label, color in legend_dict.items()
+        ]
+        cartoee.add_legend(ax, legend_elements=legend_elements, loc="lower right", font_size=9)
 
     ax.set_title(title, fontsize=14)
     out_png.parent.mkdir(parents=True, exist_ok=True)
@@ -132,3 +142,128 @@ def build_mp4(frame_paths: list[Path], out_mp4: Path, fps: float = 1.0) -> Path:
     out_mp4.parent.mkdir(parents=True, exist_ok=True)
     iio.imwrite(out_mp4, frames, fps=fps, codec="libx264")
     return out_mp4
+
+
+# Simple diverging palettes tuned per index category; extend as needed.
+VIS_PARAMS = {
+    "NDVI": {"min": -0.2, "max": 0.9, "palette": ["#a50026", "#ffffbf", "#1a9850"]},
+    "NDDI": {"min": -0.5, "max": 0.5, "palette": ["#1a9850", "#ffffbf", "#a50026"]},
+    "NDWI": {"min": -0.5, "max": 0.5, "palette": ["#a50026", "#ffffbf", "#3288bd"]},
+}
+
+
+def _add_months(d, months: int):
+    from datetime import date as _date
+
+    m = d.month - 1 + months
+    y = d.year + m // 12
+    m = m % 12 + 1
+    day = min(d.day, 28)
+    return _date(y, m, day)
+
+
+def generate_timelapse(
+    aoi_name: str,
+    index_code: str,
+    start,
+    end,
+    step_months: int = 1,
+    fps: float = 1.0,
+    on_frame=None,
+) -> dict:
+    """
+    Generate a full cartographic timelapse (GEE path only) for `aoi_name`
+    ("Kerala" for the whole state, or an exact Kerala district name) and
+    `index_code` between `start` and `end` (datetime.date), stepping by
+    `step_months`. Framework-agnostic -- both the FastAPI route
+    (api/routes_timelapse.py) and the Streamlit app call this directly,
+    so there is exactly one implementation to maintain and debug.
+
+    `on_frame(step, total_estimate, frame_path)` is called after each
+    frame renders, if given -- lets a caller show progress (e.g. a
+    Streamlit progress bar) without this module knowing about Streamlit.
+
+    Raises ValueError for bad input (unknown index, AOI not found, GEE
+    unavailable, or a date range that produces zero frames).
+    """
+    import uuid
+
+    from ..core import gee
+    from ..core.config import TIMELAPSE_DIR
+    from .indexes import INDEX_BY_CODE, S2_BANDS
+
+    if index_code not in INDEX_BY_CODE:
+        raise ValueError(f"Unknown index: {index_code}")
+    if not gee.is_available():
+        raise ValueError(
+            "Timelapse generation currently requires the Google Earth Engine backend "
+            "(geemap/cartoee). Configure GEE credentials, or request an admin-generated "
+            "dataset instead."
+        )
+
+    ee = gee.ee_module()
+    idx_def = INDEX_BY_CODE[index_code]
+    aoi_name = aoi_name.strip()
+    if aoi_name.lower() in ("kerala", "kerala (state)"):
+        aoi = gee.kerala_boundary()
+    else:
+        aoi = gee.kerala_districts().filter(ee.Filter.eq("ADM2_NAME", aoi_name))
+        if aoi.size().getInfo() == 0:
+            raise ValueError(
+                f"AOI '{aoi_name}' not found among Kerala districts (GEE FAO GAUL names). "
+                "Use the exact district name from the AOI catalog, or 'Kerala' for the whole state."
+            )
+    geom = aoi.geometry()
+    # cartoee.get_map() passes `region` straight into ee.Geometry.Rectangle(),
+    # which needs a flat [west, south, east, north] bbox -- NOT the nested
+    # polygon ring that geom.bounds().getInfo()["coordinates"] returns (a
+    # closed 5-point ring: [[[w,s],[w,n],[e,n],[e,s],[w,s]]]). Passing the
+    # ring straight through causes `ee.ee_exception.EEException: Invalid
+    # geometry.` inside cartoee.add_layer(). Flatten it to a bbox instead.
+    bounds_ring = geom.bounds().getInfo()["coordinates"][0]
+    lons = [pt[0] for pt in bounds_ring]
+    lats = [pt[1] for pt in bounds_ring]
+    region = [min(lons), min(lats), max(lons), max(lats)]
+
+    frames: list[Path] = []
+    run_id = uuid.uuid4().hex[:10]
+    out_dir = TIMELAPSE_DIR / run_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    cur = start
+    step = 0
+    total_estimate = max(1, (end.year - start.year) * 12 // step_months + 1)
+    vis = VIS_PARAMS.get(index_code, {"min": -1, "max": 1, "palette": ["#a50026", "#ffffbf", "#1a9850"]})
+    legend = {"Low": vis["palette"][0], "Mid": vis["palette"][1], "High": vis["palette"][-1]}
+
+    while cur < end:
+        nxt = _add_months(cur, step_months)
+        col = (
+            ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+            .filterBounds(geom)
+            .filterDate(str(cur), str(min(nxt, end)))
+        )
+        img = col.map(lambda i: idx_def.fn(i.divide(10000), S2_BANDS).rename(index_code)).median().clip(geom)
+        out_png = out_dir / f"frame_{step:03d}.png"
+        render_frame_gee(
+            img, region, vis, out_png,
+            title=f"{aoi_name} - {index_code} - {cur.isoformat()}",
+            legend_dict=legend,
+        )
+        frames.append(out_png)
+        if on_frame:
+            on_frame(step + 1, total_estimate, out_png)
+        cur = nxt
+        step += 1
+
+    if not frames:
+        raise ValueError("Date range produced no frames; widen start/end.")
+
+    gif_path = out_dir / "timelapse.gif"
+    build_gif(frames, gif_path, fps=fps)
+    return {
+        "run_id": run_id,
+        "frame_count": len(frames),
+        "gif_path": gif_path,
+        "frame_paths": frames,
+    }

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Canopy GeoAI — Drought &amp; LULC Change Monitor</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand-heading" href="https://www.canopygs.in" target="_blank" rel="noreferrer">
+        <img class="brand-logo" src="{{ url_for('static', filename='logo.png') }}" alt="Canopy Geospatial Solutions logo">
+        <div>
+          <p class="company-name">Canopy Geospatial Solutions</p>
+          <p class="eyebrow">Canopy GeoAI</p>
+          <h1>Drought &amp; LULC Change Monitor</h1>
+        </div>
+      </a>
+      <nav class="topbar-actions">
+        <div class="status-pill" id="gee-status">Checking Earth Engine…</div>
+        <a class="icon-button" href="/admin" title="Admin">A</a>
+      </nav>
+    </header>
+
+    <section class="notice">
+      <strong>Kerala pilot.</strong>
+      Compare pre- vs post-monsoon Sentinel-2/Landsat composites, compute standard drought and vegetation
+      indices, and flag land-cover "shrinkage" ahead of the next monsoon.
+    </section>
+
+    <div class="layout">
+      <aside class="controls-col">
+        <details class="panel" open>
+          <summary>Sentinel-2 / Landsat dataset</summary>
+          <div class="panel-body">
+            <label class="radio-row"><input type="radio" name="data-source" value="sentinel-2" checked>
+              <span><strong>Sentinel-2</strong> — 10m, ~5-day revisit, no thermal band</span></label>
+            <label class="radio-row"><input type="radio" name="data-source" value="landsat">
+              <span><strong>Landsat 8/9</strong> — 30m, ~16-day revisit, has thermal band (needed for TCI/VHI)</span></label>
+          </div>
+        </details>
+
+        <details class="panel" open>
+          <summary>Indexes (indexdatabase.de + literature)</summary>
+          <div class="panel-body" id="index-list">
+            <p class="muted">Loading index catalog…</p>
+          </div>
+        </details>
+
+        <details class="panel">
+          <summary>Analysis (pre- vs post-monsoon)</summary>
+          <div class="panel-body">
+            <label>Area
+              <select id="analysis-area"></select>
+            </label>
+            <div class="grid-2">
+              <label>Pre-monsoon start <input type="date" id="pre-start"></label>
+              <label>Pre-monsoon end <input type="date" id="pre-end"></label>
+              <label>Post-monsoon start <input type="date" id="post-start"></label>
+              <label>Post-monsoon end <input type="date" id="post-end"></label>
+            </div>
+            <button id="run-analysis">Run analysis</button>
+            <div id="analysis-results"></div>
+          </div>
+        </details>
+
+        <details class="panel" id="layers-panel">
+          <summary>Map layers (from last analysis)</summary>
+          <div class="panel-body" id="layer-list">
+            <p class="muted">Run an analysis to load Pre/Post layers here.</p>
+          </div>
+        </details>
+
+        <details class="panel">
+          <summary>Timelapse (graticule / north arrow / scale bar / legend)</summary>
+          <div class="panel-body">
+            <label>Area
+              <select id="tl-area"></select>
+            </label>
+            <label>Index
+              <select id="tl-index">
+                <option value="NDVI">NDVI</option>
+                <option value="NDDI">NDDI (drought)</option>
+                <option value="NDWI">NDWI</option>
+              </select>
+            </label>
+            <div class="grid-3">
+              <label>Start <input type="date" id="tl-start" value="2019-01-01"></label>
+              <label>End <input type="date" id="tl-end"></label>
+              <label>Step (months) <input type="number" id="tl-step" min="1" max="12" value="3"></label>
+            </div>
+            <button id="run-timelapse">Generate timelapse</button>
+            <div id="timelapse-progress" class="muted"></div>
+          </div>
+        </details>
+
+        <details class="panel">
+          <summary>Need a dataset that isn't here? Request it</summary>
+          <div class="panel-body">
+            <p class="muted">The Canopy technical team will evaluate, validate, and release both spatial and Excel outputs once confirmed.</p>
+            <form id="request-form">
+              <div class="grid-2">
+                <label>Your name <input type="text" id="req-name" required></label>
+                <label>Email <input type="email" id="req-email" required></label>
+              </div>
+              <label>Organization / Department <input type="text" id="req-org"></label>
+              <label>AOI <input type="text" id="req-aoi" value="Kerala"></label>
+              <div class="grid-2">
+                <label>Window start <input type="date" id="req-start"></label>
+                <label>Window end <input type="date" id="req-end"></label>
+              </div>
+              <label>Purpose / notes <textarea id="req-purpose" rows="2"></textarea></label>
+              <button type="submit">Request dataset</button>
+            </form>
+            <div id="request-status" class="muted"></div>
+          </div>
+        </details>
+      </aside>
+
+      <section class="main-col">
+        <article class="panel-static">
+          <h2>Map</h2>
+          <div id="map"></div>
+        </article>
+
+        <article class="panel-static" id="timelapse-viewer" hidden>
+          <h2>Latest timelapse</h2>
+          <img id="timelapse-gif" alt="Timelapse animation">
+          <div class="print-actions">
+            <button id="print-frame" type="button">Print latest frame</button>
+          </div>
+        </article>
+      </section>
+    </div>
+
+    <footer>
+      <strong>Maintained and owned by <a href="https://www.canopygs.in">Canopy Geospatial Solutions</a>.</strong>
+      Timelapse frames are print-ready with graticule, north arrow, scale bar, and legend already baked in.
+    </footer>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="{{ url_for('static', filename='main.js') }}"></script>
+</body>
+</html>

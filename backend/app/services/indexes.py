@@ -43,6 +43,7 @@ class IndexDef:
     category: str
     reference: str
     fn: Callable
+    interpretation: str = ""
 
 
 def _ee_norm(a, b):
@@ -173,19 +174,53 @@ def nddi(img, sensor_map=S2_BANDS):
 
 
 INDEX_CATALOG: list[IndexDef] = [
-    IndexDef("NDVI", "Normalized Difference Vegetation Index", "(NIR-Red)/(NIR+Red)", ("nir", "red"), "vegetation", "Rouse et al. 1974", ndvi),
-    IndexDef("GNDVI", "Green NDVI", "(NIR-Green)/(NIR+Green)", ("nir", "green"), "vegetation", "Gitelson et al. 1996", gndvi),
-    IndexDef("EVI", "Enhanced Vegetation Index", "2.5*(NIR-Red)/(NIR+6Red-7.5Blue+1)", ("nir", "red", "blue"), "vegetation", "Huete et al. 2002", evi),
-    IndexDef("SAVI", "Soil Adjusted Vegetation Index", "(NIR-Red)(1+L)/(NIR+Red+L)", ("nir", "red"), "vegetation", "Huete 1988", savi),
-    IndexDef("NDRE", "Normalized Difference Red Edge", "(NIR-RE1)/(NIR+RE1)", ("nir", "rededge1"), "vegetation", "Barnes et al. 2000", ndre),
-    IndexDef("NDWI", "Normalized Difference Water Index", "(Green-NIR)/(Green+NIR)", ("green", "nir"), "water", "McFeeters 1996", ndwi),
-    IndexDef("MNDWI", "Modified NDWI", "(Green-SWIR1)/(Green+SWIR1)", ("green", "swir16"), "water", "Xu 2006", mndwi),
-    IndexDef("NDMI", "Normalized Difference Moisture Index", "(NIR-SWIR1)/(NIR+SWIR1)", ("nir", "swir16"), "moisture", "Gao 1996", ndmi),
-    IndexDef("MSI", "Moisture Stress Index", "SWIR1/NIR", ("swir16", "nir"), "moisture", "Rock et al. 1986", msi),
-    IndexDef("BSI", "Bare Soil Index", "((SWIR1+Red)-(NIR+Blue))/((SWIR1+Red)+(NIR+Blue))", ("swir16", "red", "nir", "blue"), "soil", "Rikimaru et al. 2002", bsi),
-    IndexDef("NDBI", "Normalized Difference Built-up Index", "(SWIR1-NIR)/(SWIR1+NIR)", ("swir16", "nir"), "built-up", "Zha et al. 2003", ndbi),
-    IndexDef("NBR", "Normalized Burn Ratio", "(NIR-SWIR2)/(NIR+SWIR2)", ("nir", "swir22"), "fire", "Key & Benson 2006", nbr),
-    IndexDef("NDDI", "Normalized Difference Drought Index", "(NDVI-NDWI)/(NDVI+NDWI)", ("nir", "red", "green"), "drought", "Gu et al. 2007", nddi),
+    IndexDef("NDVI", "Normalized Difference Vegetation Index", "(NIR-Red)/(NIR+Red)", ("nir", "red"), "vegetation", "Rouse et al. 1974", ndvi,
+             interpretation="Ranges roughly -1 to 1. Higher = denser, healthier green vegetation; near 0 or negative = bare soil, water, or built-up. A drop from pre- to post-monsoon window is the headline vegetation-stress signal."),
+    IndexDef("GNDVI", "Green NDVI", "(NIR-Green)/(NIR+Green)", ("nir", "green"), "vegetation", "Gitelson et al. 1996", gndvi,
+             interpretation="Like NDVI but more sensitive to chlorophyll concentration than canopy structure; useful for detecting early-stage stress before NDVI moves."),
+    IndexDef("EVI", "Enhanced Vegetation Index", "2.5*(NIR-Red)/(NIR+6Red-7.5Blue+1)", ("nir", "red", "blue"), "vegetation", "Huete et al. 2002", evi,
+             interpretation="Corrects NDVI for atmospheric haze and canopy background (soil) noise; more reliable than NDVI over dense forest where NDVI saturates."),
+    IndexDef("SAVI", "Soil Adjusted Vegetation Index", "(NIR-Red)(1+L)/(NIR+Red+L)", ("nir", "red"), "vegetation", "Huete 1988", savi,
+             interpretation="NDVI adjusted for exposed-soil brightness (via the L factor); more accurate than NDVI in sparsely vegetated or early-growth-stage areas."),
+    IndexDef("NDRE", "Normalized Difference Red Edge", "(NIR-RE1)/(NIR+RE1)", ("nir", "rededge1"), "vegetation", "Barnes et al. 2000", ndre,
+             interpretation="Uses the red-edge band (Sentinel-2 only) to detect chlorophyll/nitrogen stress in already-dense canopies where NDVI has saturated."),
+    IndexDef("NDWI", "Normalized Difference Water Index", "(Green-NIR)/(Green+NIR)", ("green", "nir"), "water", "McFeeters 1996", ndwi,
+             interpretation="Positive values = open water; negative = vegetation/soil. Tracks surface-water extent (reservoirs, wetlands, paddy flooding) between the two windows."),
+    IndexDef("MNDWI", "Modified NDWI", "(Green-SWIR1)/(Green+SWIR1)", ("green", "swir16"), "water", "Xu 2006", mndwi,
+             interpretation="Like NDWI but swaps in SWIR, which suppresses false water signal from built-up areas -- more reliable than NDWI in urban/peri-urban Kerala."),
+    IndexDef("NDMI", "Normalized Difference Moisture Index", "(NIR-SWIR1)/(NIR+SWIR1)", ("nir", "swir16"), "moisture", "Gao 1996", ndmi,
+             interpretation="Tracks water content held in vegetation canopy (not open water). Falling NDMI pre-to-post = vegetation drying out, an early drought-stress indicator."),
+    IndexDef("MSI", "Moisture Stress Index", "SWIR1/NIR", ("swir16", "nir"), "moisture", "Rock et al. 1986", msi,
+             interpretation="Inverted relative to the others here: HIGHER MSI means drier canopy / more moisture stress. Typical range ~0.4 (well-watered) to >2 (severe stress)."),
+    IndexDef("BSI", "Bare Soil Index", "((SWIR1+Red)-(NIR+Blue))/((SWIR1+Red)+(NIR+Blue))", ("swir16", "red", "nir", "blue"), "soil", "Rikimaru et al. 2002", bsi,
+             interpretation="Higher = more exposed/bare soil. An increase pre-to-post can mean vegetation loss exposing bare ground, or a harvested/cleared field."),
+    IndexDef("NDBI", "Normalized Difference Built-up Index", "(SWIR1-NIR)/(SWIR1+NIR)", ("swir16", "nir"), "built-up", "Zha et al. 2003", ndbi,
+             interpretation="Positive = built-up/impervious surface; negative = vegetation or water. Used here mainly to rule out 'urbanization' as the cause of an NDVI drop (i.e. distinguish real drought from new construction)."),
+    IndexDef("NBR", "Normalized Burn Ratio", "(NIR-SWIR2)/(NIR+SWIR2)", ("nir", "swir22"), "fire", "Key & Benson 2006", nbr,
+             interpretation="High = healthy vegetation; a sharp drop pre-to-post indicates burn scar / fire damage rather than drought stress alone."),
+    IndexDef("NDDI", "Normalized Difference Drought Index", "(NDVI-NDWI)/(NDVI+NDWI)", ("nir", "red", "green"), "drought", "Gu et al. 2007", nddi,
+             interpretation="Higher = more agricultural drought stress (vegetation signal weak relative to water signal). CAVEAT: because the denominator is (NDVI+NDWI), values swing to unusually large magnitudes (well outside the typical -1..1 range other normalized-difference indices stay within) whenever NDVI and NDWI are close in magnitude but opposite in sign -- i.e. their sum approaches zero. Treat a large NDDI swing between two windows as 'vegetation-water balance shifted a lot' rather than a literal percentage; the direction (pre > post here, meaning drought conditions eased) is more reliable than the raw magnitude."),
 ]
 
 INDEX_BY_CODE = {i.code: i for i in INDEX_CATALOG}
+
+# Simple diverging visualization palettes per index category, keyed the same
+# way across analysis.py (map layers) and timelapse.py (cartographic
+# frames) so a given index always renders with the same colors.
+DEFAULT_VIS_PARAMS: dict[str, dict] = {
+    "vegetation": {"min": -0.2, "max": 0.9, "palette": ["#a50026", "#ffffbf", "#1a9850"]},
+    "water": {"min": -0.5, "max": 0.5, "palette": ["#a50026", "#ffffbf", "#3288bd"]},
+    "moisture": {"min": -0.5, "max": 0.5, "palette": ["#a50026", "#ffffbf", "#3288bd"]},
+    "soil": {"min": -0.5, "max": 0.5, "palette": ["#1a9850", "#ffffbf", "#8c510a"]},
+    "built-up": {"min": -0.5, "max": 0.5, "palette": ["#1a9850", "#ffffbf", "#8c510a"]},
+    "fire": {"min": -0.5, "max": 0.5, "palette": ["#a50026", "#ffffbf", "#1a9850"]},
+    "drought": {"min": -1, "max": 1, "palette": ["#1a9850", "#ffffbf", "#a50026"]},
+}
+
+
+def default_vis_params(idx: IndexDef) -> dict:
+    """Fallback GEE visualization params for an index's map layer/timelapse
+    frame, keyed by category. Same idea as timelapse.py's VIS_PARAMS dict
+    but covering all 13 catalog indexes (that dict only covers the 3
+    exposed in the Timelapse dropdown)."""
+    return DEFAULT_VIS_PARAMS.get(idx.category, {"min": -1, "max": 1, "palette": ["#a50026", "#ffffbf", "#1a9850"]})

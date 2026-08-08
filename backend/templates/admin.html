@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Canopy GeoAI — Admin</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='admin-icon.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand-heading" href="/">
+        <img class="brand-logo" src="{{ url_for('static', filename='logo.png') }}" alt="Canopy Geospatial Solutions logo">
+        <div>
+          <p class="company-name">Canopy Geospatial Solutions</p>
+          <p class="eyebrow">Canopy GeoAI</p>
+          <h1>
+            <img class="admin-heading-icon" src="{{ url_for('static', filename='admin-icon.png') }}" alt="">
+            Admin — Dataset Request Queue
+          </h1>
+        </div>
+      </a>
+      <nav class="topbar-actions">
+        <div id="who" class="status-pill" hidden></div>
+        <button id="logout-btn" hidden>Log out</button>
+        <a class="icon-button" href="/" title="Dashboard">←</a>
+      </nav>
+    </header>
+
+    <section id="login-view" class="panel-static" style="max-width:420px;margin:0 auto;">
+      <h2>Admin Login</h2>
+      <p class="muted">Canopy Geospatial Solutions — dataset request review queue.</p>
+      <form id="login-form">
+        <label>Username <input type="text" id="login-username" required></label>
+        <label>Password <input type="password" id="login-password" required></label>
+        <button type="submit">Log in</button>
+      </form>
+      <p id="login-error" class="status-warn"></p>
+    </section>
+
+    <section id="queue-view" hidden>
+      <div class="panel-static">
+        <label>Filter by status
+          <select id="status-filter">
+            <option value="">(all)</option>
+            <option value="requested">requested</option>
+            <option value="under_review">under_review</option>
+            <option value="approved">approved</option>
+            <option value="rejected">rejected</option>
+            <option value="released">released</option>
+          </select>
+        </label>
+      </div>
+      <div id="queue-list"></div>
+    </section>
+
+    <footer>
+      <strong>Maintained and owned by <a href="https://www.canopygs.in">Canopy Geospatial Solutions</a>.</strong>
+    </footer>
+  </main>
+
+  <script src="{{ url_for('static', filename='admin.js') }}"></script>
+</body>
+</html>

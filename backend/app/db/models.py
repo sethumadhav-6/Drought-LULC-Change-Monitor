@@ -33,26 +33,30 @@ def _uuid() -> str:
 class DatasetRequest(Base):
     __tablename__ = "dataset_requests"
 
-    id = Column(String, primary_key=True, default=_uuid)
-    requester_name = Column(String, nullable=False)
-    requester_email = Column(String, nullable=False)
-    organization = Column(String, nullable=True)
+    # Explicit lengths on every String column: SQLite doesn't care, but
+    # MySQL's VARCHAR requires a length or SQLAlchemy fails to compile the
+    # table (this model needs to work on both backends -- see core/aoi.py
+    # docstring on the MySQL/SQLite dual-backend setup in db/database.py).
+    id = Column(String(36), primary_key=True, default=_uuid)
+    requester_name = Column(String(255), nullable=False)
+    requester_email = Column(String(255), nullable=False)
+    organization = Column(String(255), nullable=True)
 
-    aoi_name = Column(String, nullable=False)          # e.g. "Idukki district" or "Kerala (state)"
+    aoi_name = Column(String(255), nullable=False)      # e.g. "Idukki district" or "Kerala (state)"
     aoi_geojson = Column(JSON, nullable=True)           # custom AOI, if drawn on the map
-    data_source = Column(String, nullable=False)        # "sentinel-2" | "landsat"
+    data_source = Column(String(50), nullable=False)    # "sentinel-2" | "landsat"
     indexes = Column(JSON, nullable=False)              # e.g. ["NDVI","NDDI","VHI"]
-    date_start = Column(String, nullable=False)
-    date_end = Column(String, nullable=False)
+    date_start = Column(String(20), nullable=False)
+    date_end = Column(String(20), nullable=False)
     purpose = Column(Text, nullable=True)
 
     status = Column(Enum(RequestStatus), default=RequestStatus.requested, nullable=False)
     admin_notes = Column(Text, nullable=True)
-    reviewed_by = Column(String, nullable=True)
+    reviewed_by = Column(String(255), nullable=True)
 
-    result_excel_path = Column(String, nullable=True)
-    result_spatial_path = Column(String, nullable=True)
-    result_timelapse_path = Column(String, nullable=True)
+    result_excel_path = Column(String(500), nullable=True)
+    result_spatial_path = Column(String(500), nullable=True)
+    result_timelapse_path = Column(String(500), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

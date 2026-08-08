@@ -1,12 +1,28 @@
-# --- Web framework ---
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
+# --- Web app (primary UI): Flask, server-rendered templates + vanilla JS,
+# same pattern as the Canopy Geospatial Solutions gps_accuracy_live_app
+# reference app. See backend/flask_app.py. ---
+flask==3.0.3
+gunicorn==22.0.0
+
+# --- Database: MySQL primary (PyMySQL driver), SQLite automatic fallback
+# for quick local testing -- see core/config.py / db/database.py. ---
+sqlalchemy==2.0.35
+pymysql==1.1.1
+cryptography==43.0.1
+
+# --- Settings (core/config.py) -- used by every UI/stack in this repo,
+# not just the legacy ones below. ---
 pydantic==2.9.2
 pydantic-settings==2.5.2
-python-multipart==0.0.9
 
-# --- Database (admin request/approval workflow) ---
-sqlalchemy==2.0.35
+# --- Superseded UIs kept in the repo but no longer the primary path -- see
+# docs/DEPLOYMENT.md / README.md "Legacy stacks". Only needed if you still
+# want the Streamlit app or the old REST API / Next.js frontend running. ---
+streamlit==1.39.0
+streamlit-folium==0.23.1
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
 
 # --- Geospatial / Earth Engine (opengeos / giswqs ecosystem) ---
 earthengine-api==1.1.2

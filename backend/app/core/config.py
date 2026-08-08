@@ -10,6 +10,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -52,7 +53,29 @@ class Settings(BaseSettings):
     admin_username: str = "canopyceo"
     admin_password: str = "plothy@4578"
 
-    database_url: str = f"sqlite:///{DATA_STORE_DIR}/canopy.db"
+    # --- Flask session cookie signing (admin login) ---
+    flask_secret_key: str = "change-me-flask-secret-key"
+
+    # --- Database: MySQL primary, SQLite automatic fallback for quick local
+    # testing without a MySQL server set up. Set DATABASE_URL directly to
+    # override both (e.g. for a different DB entirely). ---
+    mysql_host: str | None = None
+    mysql_port: int = 3306
+    mysql_user: str | None = None
+    mysql_password: str | None = None
+    mysql_database: str = "canopy_geoai"
+    database_url_override: str | None = Field(default=None, validation_alias="DATABASE_URL")
+
+    @property
+    def database_url(self) -> str:
+        if self.database_url_override:
+            return self.database_url_override
+        if self.mysql_host and self.mysql_user:
+            from urllib.parse import quote_plus
+
+            pw = quote_plus(self.mysql_password or "")
+            return f"mysql+pymysql://{self.mysql_user}:{pw}@{self.mysql_host}:{self.mysql_port}/{self.mysql_database}"
+        return f"sqlite:///{DATA_STORE_DIR}/canopy.db"
 
     # --- AOI boundaries ---
     # Precise Kerala district boundaries (GADM-format shapefile: NAME_2 =

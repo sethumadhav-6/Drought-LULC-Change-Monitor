@@ -18,90 +18,95 @@ built-up) above a configurable area threshold, and generate a print-ready report
 
 ## Architecture
 
+**Primary app: Flask + MySQL, one process, no build step.** Same pattern as Canopy
+Geospatial Solutions' `gps_accuracy_live_app` reference: a single Flask entrypoint,
+server-rendered HTML templates, vanilla JS in `static/` (no Node.js, no React, no
+npm install, no CORS), deployed with `gunicorn`.
+
 ```
 canopy-geoai/
-  backend/     FastAPI + geemap/leafmap (Python). Sentinel-2/Landsat access,
-               index + drought + LULC-change engine, timelapse/report generation,
-               SQLite-backed admin request/approval workflow. -> deploy to Render.
-  frontend/    Next.js (TypeScript, Tailwind, react-leaflet). Map UI with
-               collapsible Sentinel-2/Landsat + index sections, timelapse viewer,
-               dataset-request form, admin review queue, print view. -> deploy to Vercel.
-  data_store/  Local file store for generated timelapses/reports/spatial exports
-               (mount a persistent disk here in production -- see render.yaml).
-  docs/        Index formula reference, deployment guide, data-source notes.
+  run.py                   One-command launcher (pins the right conda env, see below).
+  backend/
+    flask_app.py            Flask entrypoint: page routes (/,  /admin) + JSON API routes.
+    templates/               index.html (dashboard), admin.html (request queue).
+    static/                  main.js, admin.js, styles.css, logo.png -- vanilla JS/CSS.
+    app/
+      core/                  GEE auth (core/gee.py), Planetary Computer fallback
+                              (core/stac_pc.py), Kerala shapefile AOI loader (core/aoi.py).
+      services/               Index library, drought engine, LULC change detection,
+                               timelapse/cartographic rendering, Excel/spatial reports --
+                               framework-agnostic, called directly by flask_app.py.
+      db/                     MySQL-backed (SQLite fallback) admin request/approval workflow.
+      api/, main.py            Superseded FastAPI REST API -- see "Superseded stacks" below.
+    streamlit_app.py, pages/  Superseded Streamlit UI -- see "Superseded stacks" below.
+  frontend/                  Superseded Next.js UI -- see "Superseded stacks" below.
+  data_store/                Generated timelapses/reports/spatial exports + your Kerala
+                              shapefile (data_store/shapefiles/). MySQL holds the admin DB.
+  docs/                      Index formula reference, deployment guide, data-source notes.
 ```
 
 Data access is dual-path: **Google Earth Engine** (via `geemap`) is the primary
-source and is what the "indexes"/"timelapse" endpoints assume; when GEE isn't
-configured, the backend automatically falls back to the **Microsoft Planetary
-Computer** open STAC catalog (no account needed) for Sentinel-2/Landsat search +
-local index computation.
+source and is what Timelapse generation requires; when GEE isn't configured,
+Analysis automatically falls back to the **Microsoft Planetary Computer** open
+STAC catalog (no account needed) for Sentinel-2/Landsat search + local index
+computation.
 
-## Quick start (local dev)
+## Quick start
 
-**Run both at once** — after doing the one-time setup below for backend and
-frontend separately (installing deps, `.env` files), you don't need two
-terminals every time. From the repo root:
-
-```powershell
-python run.py
-```
-
-You don't need to `conda activate canopy-geoai` first — `run.py` finds that
-environment's Python directly (via `conda run -n canopy-geoai`), so it can't
-accidentally run against the wrong global Python install (this is what
-caused the `ModuleNotFoundError: No module named 'pkg_resources'` /
-`geemap` import failures earlier — the server was running under an
-unrelated global Python 3.14, not the conda env, because `python`/`uvicorn`
-on PATH resolved to the wrong one).
-
-This starts the backend (port 8000) and frontend (port 4521) together in one
-terminal, with `[backend]`/`[frontend]`-prefixed logs, and stops both on
-Ctrl+C. It assumes `npm install` has already been run once in `frontend/`
-(see below) — it won't install frontend deps for you.
-
-**One-time setup — Backend, macOS/Linux**
+**One-time setup — macOS/Linux**
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-uvicorn app.main:app --reload --port 8000
-# docs: http://localhost:8000/docs
 ```
 
-**One-time setup — Backend, Windows**
+**One-time setup — Windows**
 
 `rasterio`/GDAL/`cartopy` (used for index math and the cartographic timelapse
-renderer) don't have reliable `pip`-installable wheels on native Windows —
-`pip install -r requirements.txt` will fail trying to build `rasterio` from
-source (missing GDAL/build tools). Use conda instead (Anaconda/Miniconda):
+renderer) don't have reliable `pip`-installable wheels on native Windows — use
+conda instead (Anaconda/Miniconda):
 
 ```powershell
 cd backend
 conda env create -f environment.yml
-conda activate canopy-geoai
 copy .env.example .env
-python -m uvicorn app.main:app --reload --port 8000
-# docs: http://localhost:8000/docs
 ```
 
-Use `python -m uvicorn ...` (not bare `uvicorn ...`) — it guarantees the
-`uvicorn` that's actually on your `PATH` (e.g. from a global Anaconda install)
-doesn't get picked up instead of the one in your active environment.
+This pins a couple of versions that matter (see comments in `environment.yml`):
+`setuptools<81` (newer setuptools dropped `pkg_resources`, which `geemap`
+still imports) and `ipython<9` (`geemap`'s toolbar module uses an IPython
+import path removed in 9.x). Both are upstream `geemap` compatibility issues,
+not something specific to this app.
 
-**One-time setup — Frontend**
-```bash
-cd frontend
-npm install
-cp .env.example .env.local
-npm run dev
-# app: http://localhost:4521, admin: http://localhost:4521/admin
+**MySQL**
+
+Edit `backend/.env` with your MySQL credentials:
 ```
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=canopy
+MYSQL_PASSWORD=your-password
+MYSQL_DATABASE=canopy_geoai
+```
+Create the database if it doesn't exist yet: `CREATE DATABASE canopy_geoai;` in
+a MySQL client. The app creates its one table (`dataset_requests`) automatically
+on first run. If you leave `MYSQL_HOST` unset, the app falls back to a local
+SQLite file instead — fine for quick testing without a MySQL server handy.
 
-After both one-time setups are done, use `python run.py` from the repo root
-(see above) instead of running these `npm run dev` / `uvicorn` commands by
-hand each time.
+**Run it**
+```powershell
+cd canopy-geoai        # repo root
+python run.py
+```
+Open http://localhost:5000 — dashboard at `/`, admin queue at `/admin`.
+`run.py` runs the app inside the `canopy-geoai` conda env directly (via `conda
+run -n canopy-geoai`) regardless of what `python` on your PATH would otherwise
+resolve to — this avoids a real issue hit during development where a stray
+global Python install shadowed the conda one, causing confusing
+partial-failure symptoms. If you're on macOS/Linux with a plain venv instead
+of conda, just run `python flask_app.py` from inside `backend/` with that
+venv active.
 
 ## Getting Google Earth Engine access
 
@@ -110,8 +115,9 @@ hand each time.
    nonprofit use).
 2. In that Google Cloud project: enable the **Earth Engine API**, then create a
    **service account** (IAM & Admin → Service Accounts → Create) and grant it
-   the "Earth Engine Resource Writer" role (or register it directly at
-   https://code.earthengine.google.com/register under "Service account").
+   two roles: **Earth Engine Resource Writer** and **Service Usage Consumer**
+   (both are required — Earth Engine calls fail with a permissions error if
+   only one is present).
 3. Create a JSON key for that service account (Keys → Add key → JSON) and
    download it.
 4. In `backend/.env`, set:
@@ -119,57 +125,82 @@ hand each time.
      `canopy-geoai@your-project.iam.gserviceaccount.com`)
    - `GEE_SERVICE_ACCOUNT_KEY_PATH` = path to the downloaded JSON file (local
      dev), **or** `GEE_SERVICE_ACCOUNT_KEY_JSON` = the file's contents pasted
-     as one line (needed for Render, since it can't mount a key file)
+     as one line (needed for hosting where you can't drop in a key file)
    - `GEE_PROJECT` = your Google Cloud project ID
-5. Restart the backend. Check it worked: `GET http://localhost:8000/api/health`
-   should show `"gee_available": true`.
+5. Restart the app. Check `GET http://localhost:5000/api/health` — should show
+   `"gee_available": true`.
 
-If you'd rather not set this up yet, leave GEE unset: `/api/analysis` will
-automatically use the Planetary Computer fallback (no account needed); only
-`/api/timelapse` (cartoee-based cartographic rendering) requires GEE for now.
+If you'd rather not set this up yet, leave GEE unset: Analysis will
+automatically use the Planetary Computer fallback (no account needed);
+Timelapse generation requires GEE.
 
 ## Admin login
 
-The admin queue at `/admin` uses a single pilot account, set in
-`backend/.env` (or `Settings` defaults if unset):
+The admin queue (`/admin`) uses a single pilot account, set in `backend/.env`
+(or `Settings` defaults if unset):
 
 ```
 ADMIN_USERNAME=canopyceo
 ADMIN_PASSWORD=plothy@4578
 ```
 
-Change these before sharing the app beyond your own testing — it's a single
-shared account (MVP-level auth), not per-user login. See
-`backend/app/api/routes_admin.py` for the login/session logic.
+Change these — and `FLASK_SECRET_KEY` (used to sign the login session cookie)
+— before sharing the app beyond your own testing. This is a single shared
+account (MVP-level auth), not per-user login. See `backend/flask_app.py` for
+the login/session logic.
 
 ## Core workflow
 
 1. **Dashboard** (`/`) — pick Sentinel-2 or Landsat (collapsible section), pick
    one or more indexes (collapsible section, sourced from the index catalog —
-   see `docs/INDEX_LIBRARY.md`), inspect the Kerala map, generate a timelapse.
-2. **Can't self-serve a dataset?** Use "Request it" — submits to the admin queue
-   (`POST /api/requests`).
-3. **Admin** (`/admin`) — the Canopy technical team reviews the queue, approves
-   or rejects, and once the deliverables are generated and validated, **releases**
-   them (`POST /api/admin/requests/{id}/release`) — spatial (GeoTIFF/GeoPackage)
-   + Excel become downloadable to the requester.
-4. **Print** (`/print?src=<frame-url>`) — full-page print/PDF view of a
-   cartographic timelapse frame (graticule, north arrow, scale bar, legend).
+   see `docs/INDEX_LIBRARY.md`), run pre- vs post-monsoon Analysis, generate a
+   Timelapse for the whole state or a single district.
+2. **Can't self-serve a dataset?** Use "Request it" — submits to the admin
+   queue.
+3. **Admin** (`/admin`) — the Canopy technical team reviews the queue,
+   approves or rejects, and once the deliverables are generated (via the
+   Analysis/Timelapse tools on the main dashboard) and validated,
+   **releases** them — spatial (GeoTIFF/GeoPackage) + Excel paths become
+   visible to the requester.
+4. **Print** — the Timelapse section has a "Print latest frame" button that
+   opens the frame full-size and triggers your browser's print dialog, for a
+   copy with graticule, north arrow, scale bar, and legend already baked in.
 
 ## Status: MVP scope
 
-This first build is a **deep, working pipeline for Kerala** — Sentinel-2/Landsat
+This build is a **deep, working pipeline for Kerala** — Sentinel-2/Landsat
 access (both backends), the full index + drought (VCI/TCI/VHI/NDDI) + LULC
 change-matrix engine, cartographic timelapse rendering, Excel/spatial report
-export, and a local SQLite admin request/approval workflow — with the UI wired
-to all of it. Left for the next iteration: a supervised (trained) LULC
-classifier in place of the current rule-based thresholds, a precise Kerala
-district boundary layer (GADM/Survey of India) in place of the FAO GAUL /
-bbox default, background job processing for long-running GEE reductions, and
-extending the AOI catalog to other tropical countries. See `docs/DATA_SOURCES.md`.
+export, and a MySQL-backed admin request/approval workflow — with the Flask
+UI wired directly to all of it (the actual GEE/analysis/timelapse logic lives
+in framework-agnostic `services/` modules, called directly by Flask — no HTTP
+layer in between). Left for the next iteration: a supervised (trained) LULC
+classifier in place of the current rule-based thresholds, wiring LULC
+change-matrix output into the UI (the engine exists in `services/lulc.py` but
+isn't yet called from `flask_app.py`), background job handling for very long
+timelapse runs (requests currently block the requesting user's session while
+they run), and extending the AOI catalog to other tropical countries. See
+`docs/DATA_SOURCES.md`.
+
+## Superseded stacks
+
+This app went through a few iterations during development; each prior stack
+is still in the repo and still works, but isn't the maintained path going
+forward. In all cases, the same `services/analysis.py` and
+`services/timelapse.py::generate_timelapse` functions are what actually do
+the work — only the UI layer differs, so fixes made for one apply to all.
+
+- **Streamlit** (`backend/streamlit_app.py`, `backend/pages/`) — single
+  Python process like the current Flask app, but Streamlit's own runtime
+  overhead makes it slower under real hosting load, which is why this
+  moved to Flask. Run with `streamlit run streamlit_app.py` from `backend/`.
+- **Next.js + FastAPI** (`frontend/`, `backend/app/api/`, `backend/app/main.py`)
+  — the original split-stack build (Vercel + Render). See
+  `docs/DEPLOYMENT.md` for those steps if you specifically want a
+  Vercel-hosted frontend.
 
 ## Docs
 
 - [`docs/INDEX_LIBRARY.md`](docs/INDEX_LIBRARY.md) — every spectral/drought index implemented, formula + source.
-- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — Render (backend) + Vercel (frontend) deployment steps.
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — hosting the Flask app on your own server, plus the superseded Render/Vercel steps.
 - [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) — Sentinel-2/Landsat collections used, AOI boundary notes, known limitations.
