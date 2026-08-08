@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body { height: 100%; }
+.leaflet-container { height: 100%; width: 100%; }
+
+/* --- Print layout: hide chrome, keep only the map + legend/scale/north-arrow/graticule for handoff to officials --- */
+@media print {
+  body * { visibility: hidden; }
+  #printable-map, #printable-map * { visibility: visible; }
+  #printable-map { position: absolute; left: 0; top: 0; width: 100%; }
+  .no-print { display: none !important; }
+}

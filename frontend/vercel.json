@@ -1,0 +1,7 @@
+{
+  "buildCommand": "npm run build",
+  "framework": "nextjs",
+  "env": {
+    "NEXT_PUBLIC_API_BASE_URL": "@canopy_api_base_url"
+  }
+}

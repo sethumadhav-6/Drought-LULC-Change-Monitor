@@ -1,0 +1,59 @@
+# Conda environment for Windows local dev.
+#
+# Why: rasterio / GDAL / cartopy / fiona ship as C-extension packages.
+# On Linux (Render/Docker) prebuilt PyPI wheels exist and `pip install
+# -r requirements.txt` just works. On native Windows, PyPI often has
+# no matching wheel for your Python version, so pip falls back to
+# building from source -- which then fails because it needs a GDAL
+# install + build toolchain pip can't provide. conda-forge ships
+# prebuilt binaries for all of this, so it's the reliable path on
+# Windows.
+#
+# Usage (from an Anaconda/Miniconda prompt, in backend/):
+#   conda env create -f environment.yml
+#   conda activate canopy-geoai
+#   uvicorn app.main:app --reload --port 8000
+#
+# To update later: conda env update -f environment.yml --prune
+name: canopy-geoai
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - gdal
+  - rasterio
+  - geopandas
+  - cartopy
+  - fiona
+  - shapely
+  - rioxarray
+  - xarray
+  - matplotlib
+  - pip
+  # geemap's `conversion` submodule still does `import pkg_resources`.
+  # setuptools >=81 has dropped pkg_resources outright (confirmed: 83.0.0
+  # does not have it), so this must stay pinned below that until geemap
+  # itself drops the dependency.
+  - setuptools<81
+  # geemap 0.35.1's toolbar.py does `from IPython.core.display import
+  # display`, an old import path IPython 9.x removed. Pin below 9 until
+  # geemap updates to the current `from IPython.display import display`.
+  - ipython<9
+  - pip:
+      - fastapi==0.115.0
+      - uvicorn[standard]==0.30.6
+      - pydantic==2.9.2
+      - pydantic-settings==2.5.2
+      - python-multipart==0.0.9
+      - sqlalchemy==2.0.35
+      - earthengine-api==1.1.2
+      - geemap==0.35.1
+      - leafmap==0.42.0
+      - pystac-client==0.8.3
+      - planetary-computer==1.0.0
+      - matplotlib-scalebar==0.8.1
+      - imageio[ffmpeg]==2.35.1
+      - openpyxl==3.1.5
+      - pandas==2.2.3
+      - python-dotenv==1.0.1
+      - email-validator==2.2.0

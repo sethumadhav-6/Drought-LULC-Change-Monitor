@@ -1,0 +1,30 @@
+# Render deployment blueprint for the Canopy GeoAI backend.
+# Deploy: connect this repo in Render -> "New +" -> "Blueprint" -> select this file.
+services:
+  - type: web
+    name: canopy-geoai-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: GEE_SERVICE_ACCOUNT
+        sync: false
+      - key: GEE_SERVICE_ACCOUNT_KEY_JSON
+        sync: false
+      - key: GEE_PROJECT
+        sync: false
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: '["https://your-app.vercel.app"]'
+      - key: DATA_STORE_DIR
+        value: /var/data/canopy
+    disk:
+      name: canopy-data
+      mountPath: /var/data/canopy
+      sizeGB: 10
