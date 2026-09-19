@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from .models import DatasetRequest, RequestStatus
+from .models import AnalysisRun, DatasetRequest, RequestStatus
 
 
 def create_request(db: Session, payload: dict) -> DatasetRequest:
@@ -52,3 +52,15 @@ def attach_results(db: Session, request_id: str, excel_path: str | None = None, 
     db.commit()
     db.refresh(req)
     return req
+
+
+def create_analysis_run(db: Session, payload: dict) -> AnalysisRun:
+    run = AnalysisRun(**payload)
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    return run
+
+
+def list_analysis_runs(db: Session, limit: int = 200) -> list[AnalysisRun]:
+    return db.query(AnalysisRun).order_by(AnalysisRun.created_at.desc()).limit(limit).all()

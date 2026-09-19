@@ -17,4 +17,8 @@ COPY . .
 
 ENV PORT=8000
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Flask app (flask_app.py) is the primary/maintained stack -- see README.md
+# "Superseded stacks". --timeout 300: Timelapse generation can take a
+# couple of minutes for a multi-year run; gunicorn's default 30s worker
+# timeout would kill that request mid-render.
+CMD gunicorn flask_app:app --bind 0.0.0.0:${PORT} --workers 2 --timeout 300

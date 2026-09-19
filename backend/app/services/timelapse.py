@@ -33,6 +33,7 @@ def render_frame_gee(
     title: str,
     legend_dict: dict | None = None,
     scale_km: float = 10,
+    dims: int = 900,
 ) -> Path:
     """
     Render one cartographic frame (PNG) from an ee.Image using
@@ -40,13 +41,25 @@ def render_frame_gee(
     scale bar, and an optional legend. This is the print-ready frame
     used both for a single index snapshot and as one frame of a
     timelapse sequence.
+
+    `dims` caps the pixel dimensions of the thumbnail cartoee requests
+    from Earth Engine (default 900, vs cartoee's own default of 1000).
+    Keeping this modest -- and, more importantly, having the caller
+    reproject `ee_image` to a scale roughly matching this before calling
+    render_frame_gee -- is what avoids Earth Engine's "memory capacity
+    exceeded" 503 on large AOIs: without an explicit coarser scale,
+    getThumbUrl's server-side computation graph tries to evaluate the
+    median composite at native ~10m Sentinel-2 resolution across the
+    *entire* region before downsampling, which blows past EE's per-request
+    memory budget for anything AOI-sized (a whole district or the whole
+    state). See generate_timelapse() for where the reproject happens.
     """
     import matplotlib.patches as mpatches
     import matplotlib.pyplot as plt
     from geemap import cartoee
 
     fig = plt.figure(figsize=(10, 8))
-    ax = cartoee.get_map(ee_image, region=region, vis_params=vis_params)
+    ax = cartoee.get_map(ee_image, region=region, vis_params=vis_params, dims=dims)
 
     cartoee.add_gridlines(ax, interval=[1, 1], linestyle=":")
     cartoee.add_north_arrow(ax, text="N", xy=(0.92, 0.9), arrow_length=0.08, text_color="black", arrow_color="black", fontsize=16)
@@ -190,6 +203,7 @@ def generate_timelapse(
 
     from ..core import gee
     from ..core.config import TIMELAPSE_DIR
+    from .geo_utils import flatten_bounds_ring, render_scale_for_region
     from .indexes import INDEX_BY_CODE, S2_BANDS
 
     if index_code not in INDEX_BY_CODE:
@@ -216,14 +230,15 @@ def generate_timelapse(
     geom = aoi.geometry()
     # cartoee.get_map() passes `region` straight into ee.Geometry.Rectangle(),
     # which needs a flat [west, south, east, north] bbox -- NOT the nested
-    # polygon ring that geom.bounds().getInfo()["coordinates"] returns (a
-    # closed 5-point ring: [[[w,s],[w,n],[e,n],[e,s],[w,s]]]). Passing the
-    # ring straight through causes `ee.ee_exception.EEException: Invalid
-    # geometry.` inside cartoee.add_layer(). Flatten it to a bbox instead.
-    bounds_ring = geom.bounds().getInfo()["coordinates"][0]
-    lons = [pt[0] for pt in bounds_ring]
-    lats = [pt[1] for pt in bounds_ring]
-    region = [min(lons), min(lats), max(lons), max(lats)]
+    # polygon ring that geom.bounds().getInfo()["coordinates"] returns.
+    region = flatten_bounds_ring(geom.bounds().getInfo()["coordinates"][0])
+
+    # Reproject each frame's composite to a scale that roughly matches the
+    # rendered thumbnail's pixel dimensions before requesting it -- avoids
+    # `EEException: Earth Engine memory capacity exceeded` (HTTP 503) on
+    # large AOIs. See geo_utils.render_scale_for_region().
+    RENDER_DIMS = 900
+    render_scale = render_scale_for_region(region, dims=RENDER_DIMS)
 
     frames: list[Path] = []
     run_id = uuid.uuid4().hex[:10]
@@ -243,13 +258,35 @@ def generate_timelapse(
             .filterBounds(geom)
             .filterDate(str(cur), str(min(nxt, end)))
         )
-        img = col.map(lambda i: idx_def.fn(i.divide(10000), S2_BANDS).rename(index_code)).median().clip(geom)
-        out_png = out_dir / f"frame_{step:03d}.png"
-        render_frame_gee(
-            img, region, vis, out_png,
-            title=f"{aoi_name} - {index_code} - {cur.isoformat()}",
-            legend_dict=legend,
+        img = (
+            col.map(lambda i: idx_def.fn(i.divide(10000), S2_BANDS).rename(index_code))
+            .median()
+            .clip(geom)
+            .reproject(crs="EPSG:4326", scale=render_scale)
         )
+        out_png = out_dir / f"frame_{step:03d}.png"
+        try:
+            render_frame_gee(
+                img, region, vis, out_png,
+                title=f"{aoi_name} - {index_code} - {cur.isoformat()}",
+                legend_dict=legend,
+                dims=RENDER_DIMS,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # cartoee raises requests.exceptions.HTTPError (wrapping GEE's
+            # own error payload) or ee.ee_exception.EEException here -- both
+            # bubble up as an unhandled 500 with a raw traceback if left
+            # alone. Translate to the same ValueError contract the rest of
+            # this function uses, which flask_app.py already turns into a
+            # clean 4xx JSON error for the frontend.
+            msg = str(exc)
+            if "memory capacity exceeded" in msg.lower() or "503" in msg:
+                raise ValueError(
+                    "Earth Engine ran out of memory rendering this frame. Try a smaller "
+                    "AOI (a single district instead of the whole state), a shorter date "
+                    "range, or a larger step (months) to reduce the number of frames."
+                ) from exc
+            raise ValueError(f"Earth Engine failed to render frame {step}: {msg}") from exc
         frames.append(out_png)
         if on_frame:
             on_frame(step + 1, total_estimate, out_png)

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ernakulam — NDDI (pre-monsoon) — Canopy GeoAI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: #101820; }
+  #map { height: 100vh; width: 100%; }
+  .title-box {
+    position: absolute; top: 12px; left: 54px; z-index: 1000;
+    background: rgba(16, 24, 32, 0.88); color: #eef6f8; padding: 8px 14px;
+    border-radius: 6px; font-weight: 700; font-size: 0.95rem;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+  .title-box p { margin: 4px 0 0; font-weight: 400; font-size: 0.8rem; }
+  .title-box a { color: #4ba3ff; }
+  .credit {
+    position: absolute; bottom: 8px; right: 8px; z-index: 1000;
+    background: rgba(16, 24, 32, 0.75); color: #a8bcc4; padding: 4px 8px;
+    border-radius: 4px; font-size: 0.72rem;
+  }
+</style>
+</head>
+<body>
+<div class="title-box">Ernakulam — NDDI (pre-monsoon)</div>
+<div id="map"></div>
+<div class="credit">Canopy Geospatial Solutions &middot; canopygs.in</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  var map = L.map('map');
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+  }).addTo(map);
+  var bounds = [[9.792560442093336, 76.16353728258558], [10.294329717386564, 76.82726111086204]];
+  if (bounds) {
+    L.imageOverlay('map.png', bounds, { opacity: 0.85 }).addTo(map);
+    map.fitBounds(bounds);
+  } else {
+    map.setView([10.5, 76.2], 8);
+  }
+    fetch('boundary.geojson').then(r => r.json()).then(gj => {
+      L.geoJSON(gj, { style: { color: '#0f5c30', weight: 2, fillOpacity: 0 } }).addTo(map);
+    }).catch(() => {});
+</script>
+</body>
+</html>

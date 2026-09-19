@@ -19,6 +19,7 @@ function showQueue(username) {
   $("who").textContent = `Logged in as ${username}`;
   $("logout-btn").hidden = false;
   loadQueue();
+  loadAnalysisHistory();
 }
 
 function showLogin() {
@@ -155,5 +156,52 @@ function renderRequestCard(req) {
     actions.appendChild(releaseBtn);
   }
 
+  return card;
+}
+
+async function loadAnalysisHistory() {
+  const list = $("analysis-history-list");
+  list.innerHTML = '<p class="muted">Loading…</p>';
+  try {
+    const runs = await api("/api/admin/analysis-runs");
+    if (!runs.length) {
+      list.innerHTML = '<p class="muted">No analysis runs logged yet.</p>';
+      return;
+    }
+    list.innerHTML = "";
+    runs.forEach((run) => list.appendChild(renderAnalysisRunCard(run)));
+  } catch (err) {
+    list.innerHTML = `<p class="status-warn">${err.message}</p>`;
+  }
+}
+
+function renderAnalysisRunCard(run) {
+  const card = document.createElement("details");
+  card.className = "panel";
+  const who = run.user_name || run.user_email
+    ? `${run.user_name || "(no name)"}${run.user_email ? ` <${run.user_email}>` : ""}`
+    : "Anonymous";
+  card.innerHTML = `
+    <summary>${run.aoi_name} — ${who} — ${new Date(run.created_at).toLocaleString()}</summary>
+    <div class="panel-body">
+      <div class="grid-2">
+        <div>
+          <p><strong>User:</strong> ${who}</p>
+          <p><strong>AOI:</strong> ${run.aoi_name}</p>
+          <p><strong>Data source:</strong> ${run.data_source} (${run.source_used})</p>
+        </div>
+        <div>
+          <p><strong>Indexes:</strong> ${(run.indexes || []).join(", ")}</p>
+          <p><strong>Pre window:</strong> ${run.pre_start} → ${run.pre_end}</p>
+          <p><strong>Post window:</strong> ${run.post_start} → ${run.post_end}</p>
+        </div>
+      </div>
+      <table class="results-table"><thead><tr><th>Index</th><th>Pre</th><th>Post</th></tr></thead><tbody>
+        ${Object.entries(run.stats || {}).filter(([c]) => c !== "drought_summary" && c !== "land_stress").map(([code, v]) => `
+          <tr><td>${code}</td><td>${v.pre_mean != null ? v.pre_mean.toFixed(4) : "—"}</td><td>${v.post_mean != null ? v.post_mean.toFixed(4) : "—"}</td></tr>
+        `).join("")}
+      </tbody></table>
+    </div>
+  `;
   return card;
 }

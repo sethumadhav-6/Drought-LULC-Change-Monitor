@@ -60,3 +60,33 @@ class DatasetRequest(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AnalysisRun(Base):
+    """
+    A log of every /api/analysis call made from the public dashboard --
+    separate from DatasetRequest (which is the formal admin-approval
+    workflow for datasets someone can't self-serve). This just lets the
+    Canopy team see, from the admin dashboard, what analyses users have
+    actually been running: who, which AOI, which indexes, what the
+    results were. Optional user_name/user_email -- the dashboard doesn't
+    require login, so these are only populated if the user filled in the
+    (optional) name/email fields on the Analysis panel.
+    """
+    __tablename__ = "analysis_runs"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    user_name = Column(String(255), nullable=True)
+    user_email = Column(String(255), nullable=True)
+
+    aoi_name = Column(String(255), nullable=False)
+    data_source = Column(String(50), nullable=False)
+    pre_start = Column(String(20), nullable=False)
+    pre_end = Column(String(20), nullable=False)
+    post_start = Column(String(20), nullable=False)
+    post_end = Column(String(20), nullable=False)
+    indexes = Column(JSON, nullable=False)
+    source_used = Column(String(50), nullable=False)  # "gee" | "planetary-computer"
+    stats = Column(JSON, nullable=False)               # full result["stats"] payload
+
+    created_at = Column(DateTime, default=datetime.utcnow)

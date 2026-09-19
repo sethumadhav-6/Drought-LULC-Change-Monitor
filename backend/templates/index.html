@@ -6,6 +6,7 @@
   <title>Canopy GeoAI — Drought &amp; LULC Change Monitor</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-measure/dist/leaflet-measure.css" />
 </head>
 <body>
   <main class="shell">
@@ -61,6 +62,11 @@
               <label>Post-monsoon start <input type="date" id="post-start"></label>
               <label>Post-monsoon end <input type="date" id="post-end"></label>
             </div>
+            <div class="grid-2">
+              <label>Your name <span class="muted small">(optional)</span> <input type="text" id="analysis-user-name"></label>
+              <label>Email <span class="muted small">(optional)</span> <input type="email" id="analysis-user-email"></label>
+            </div>
+            <p class="muted small">Name/email are only used so the Canopy team can see who's running what in the admin dashboard -- not required to run an analysis.</p>
             <button id="run-analysis">Run analysis</button>
             <div id="analysis-results"></div>
           </div>
@@ -121,7 +127,16 @@
 
       <section class="main-col">
         <article class="panel-static">
-          <h2>Map</h2>
+          <div class="map-toolbar">
+            <h2>Map</h2>
+            <label class="map-font-control">Map text size
+              <select id="map-font-size">
+                <option value="12">Small</option>
+                <option value="14" selected>Default</option>
+                <option value="17">Large</option>
+              </select>
+            </label>
+          </div>
           <div id="map"></div>
         </article>
 
@@ -130,7 +145,9 @@
           <img id="timelapse-gif" alt="Timelapse animation">
           <div class="print-actions">
             <button id="print-frame" type="button">Print latest frame</button>
+            <button id="publish-timelapse" type="button">Publish for web</button>
           </div>
+          <p id="publish-timelapse-status" class="muted small"></p>
         </article>
       </section>
     </div>
@@ -142,6 +159,7 @@
   </main>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-measure/dist/leaflet-measure.js"></script>
   <script src="{{ url_for('static', filename='main.js') }}"></script>
 </body>
 </html>

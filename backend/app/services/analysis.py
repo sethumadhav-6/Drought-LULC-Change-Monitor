@@ -14,7 +14,8 @@ from datetime import date
 
 from ..core import aoi as aoi_module
 from ..core import gee
-from .drought import drought_summary
+from .drought import drought_summary, land_stress_index
+from .geo_utils import flatten_bounds_ring, render_scale_for_region
 from .indexes import INDEX_BY_CODE, S2_BANDS, default_vis_params
 
 # Kerala state bounding box (lon_min, lat_min, lon_max, lat_max) -- used only
@@ -59,22 +60,38 @@ def _run_gee(aoi_name, pre_start, pre_end, post_start, post_end, indexes) -> dic
     post = ee.ImageCollection(collection_id).filterBounds(geom).filterDate(str(post_start), str(post_end))
 
     # Flat [south, west, north, east] bbox for the frontend to fit/pan the
-    # Leaflet map to -- same ring-flattening fix as timelapse.py's `region`
-    # (geom.bounds().getInfo()["coordinates"] is a nested polygon ring, not
-    # a flat bbox).
-    bounds_ring = geom.bounds().getInfo()["coordinates"][0]
-    lons = [pt[0] for pt in bounds_ring]
-    lats = [pt[1] for pt in bounds_ring]
-    bounds = [min(lats), min(lons), max(lats), max(lons)]
+    # Leaflet map to.
+    west, south, east, north = flatten_bounds_ring(geom.bounds().getInfo()["coordinates"][0])
+    bounds = [south, west, north, east]
+
+    # Same reproject-to-safe-scale fix used in timelapse.py/webgis_publish.py:
+    # without this, the live Map Layers tiles for a whole-state (or large
+    # district) AOI compute at native ~10m resolution per tile, which is
+    # slow and can silently fail (Leaflet just shows blank/missing tiles,
+    # no visible error) for the same "Earth Engine memory capacity
+    # exceeded" reason getThumbUrl hits without it. This is almost
+    # certainly why layers rendered fine in the published static export
+    # (which already reprojects) but not in the live checkbox layers here.
+    render_scale = render_scale_for_region([west, south, east, north])
 
     stats = {}
     for code in indexes:
         idx_def = INDEX_BY_CODE[code]
-        pre_img = pre.map(lambda img: idx_def.fn(img.divide(10000), S2_BANDS).rename(code)).median().clip(geom)
-        post_img = post.map(lambda img: idx_def.fn(img.divide(10000), S2_BANDS).rename(code)).median().clip(geom)
+        pre_img = (
+            pre.map(lambda img: idx_def.fn(img.divide(10000), S2_BANDS).rename(code))
+            .median().clip(geom).reproject(crs="EPSG:4326", scale=render_scale)
+        )
+        post_img = (
+            post.map(lambda img: idx_def.fn(img.divide(10000), S2_BANDS).rename(code))
+            .median().clip(geom).reproject(crs="EPSG:4326", scale=render_scale)
+        )
 
-        pre_mean = pre_img.reduceRegion(ee.Reducer.mean(), geom, scale=100, maxPixels=1e10, bestEffort=True).get(code)
-        post_mean = post_img.reduceRegion(ee.Reducer.mean(), geom, scale=100, maxPixels=1e10, bestEffort=True).get(code)
+        # scale matches render_scale (not a fixed 100m) since pre_img/post_img
+        # are already reprojected to that resolution above -- requesting a
+        # finer reduceRegion scale than the image actually has wastes
+        # computation without adding precision.
+        pre_mean = pre_img.reduceRegion(ee.Reducer.mean(), geom, scale=render_scale, maxPixels=1e10, bestEffort=True).get(code)
+        post_mean = post_img.reduceRegion(ee.Reducer.mean(), geom, scale=render_scale, maxPixels=1e10, bestEffort=True).get(code)
 
         # Map-layer tile URLs so the frontend can drop these straight onto
         # the Leaflet map as a normal XYZ layer (standard geemap/leafmap
@@ -95,12 +112,64 @@ def _run_gee(aoi_name, pre_start, pre_end, post_start, post_end, indexes) -> dic
             "post_mean": post_mean.getInfo() if post_mean is not None else None,
             "pre_tile_url": pre_tile_url,
             "post_tile_url": post_tile_url,
+            "vis": vis,
         }
 
     if "NDVI" in stats and "NDWI" in stats:
         stats["drought_summary"] = drought_summary(stats["NDVI"]["post_mean"] or 0, stats.get("NDWI", {}).get("post_mean") or 0)
 
+    # Weighted NDVI+NDBI land-stress score, computed for both windows when
+    # both indexes were requested -- see drought.py::land_stress_index for
+    # why this replaces a LULC classification here.
+    if "NDVI" in stats and "NDBI" in stats:
+        stats["land_stress"] = {
+            "pre": land_stress_index(stats["NDVI"]["pre_mean"] or 0, stats["NDBI"]["pre_mean"] or 0),
+            "post": land_stress_index(stats["NDVI"]["post_mean"] or 0, stats["NDBI"]["post_mean"] or 0),
+        }
+
     return {"aoi_name": aoi_name, "source_used": "gee", "stats": stats, "bounds": bounds}
+
+
+def get_layer_tile(
+    aoi_name: str,
+    index_code: str,
+    period: str,
+    pre_start: date,
+    pre_end: date,
+    post_start: date,
+    post_end: date,
+    vis: dict,
+) -> str:
+    """
+    Recompute a single Pre or Post composite for one index with
+    caller-supplied visualization params (palette / min / max) and return
+    a fresh GEE tile URL. Backs the dashboard's colormap/min-max
+    customization controls on an already-run analysis -- cheap to
+    recompute (same median-composite logic as _run_gee, just for one
+    index/one period) rather than trying to cache ee.Image objects
+    server-side between requests.
+    """
+    if not gee.is_available():
+        raise ValueError("Custom layer rendering requires the Google Earth Engine backend.")
+    if index_code not in INDEX_BY_CODE:
+        raise ValueError(f"Unknown index: {index_code}")
+    if period not in ("pre", "post"):
+        raise ValueError("period must be 'pre' or 'post'")
+
+    ee = gee.ee_module()
+    idx_def = INDEX_BY_CODE[index_code]
+    aoi = gee.kerala_boundary() if aoi_name.lower() == "kerala" else gee.kerala_districts().filter(
+        ee.Filter.eq("ADM2_NAME", aoi_name)
+    )
+    geom = aoi.geometry()
+    start, end = (pre_start, pre_end) if period == "pre" else (post_start, post_end)
+
+    col = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED").filterBounds(geom).filterDate(str(start), str(end))
+    img = col.map(lambda i: idx_def.fn(i.divide(10000), S2_BANDS).rename(index_code)).median().clip(geom)
+    try:
+        return img.getMapId(vis)["tile_fetcher"].url_format
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError(f"Could not render this layer with the chosen settings: {exc}") from exc
 
 
 def _run_planetary_computer(aoi_name, data_source, pre_start, pre_end, post_start, post_end, indexes) -> dict:
@@ -131,6 +200,12 @@ def _run_planetary_computer(aoi_name, data_source, pre_start, pre_end, post_star
 
     if "NDVI" in stats and "NDWI" in stats:
         stats["drought_summary"] = drought_summary(stats["NDVI"]["post_mean"], stats["NDWI"]["post_mean"])
+
+    if "NDVI" in stats and "NDBI" in stats:
+        stats["land_stress"] = {
+            "pre": land_stress_index(stats["NDVI"]["pre_mean"], stats["NDBI"]["pre_mean"]),
+            "post": land_stress_index(stats["NDVI"]["post_mean"], stats["NDBI"]["post_mean"]),
+        }
 
     # bbox is (west, south, east, north); normalize to the same
     # [south, west, north, east] shape the GEE path returns. No tile_url

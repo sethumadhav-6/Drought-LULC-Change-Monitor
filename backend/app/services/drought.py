@@ -100,3 +100,63 @@ def drought_summary(ndvi_val: float, ndwi_val: float, vhi_val: float | None = No
         record["VHI_mean"] = vhi_val
         record["VHI_class"] = classify_vhi(vhi_val)
     return record
+
+
+# NDVI/NDBI value ranges used to normalize each into 0..1 before weighting
+# -- same ranges as indexes.py's DEFAULT_VIS_PARAMS for these two
+# categories ("vegetation": -0.2..0.9, "built-up": -0.5..0.5), so the
+# score stays consistent with how these indexes are visualized elsewhere.
+_NDVI_RANGE = (-0.2, 0.9)
+_NDBI_RANGE = (-0.5, 0.5)
+
+LAND_STRESS_BREAKS = [
+    (0, 0.25, "Low"),
+    (0.25, 0.45, "Moderate"),
+    (0.45, 0.65, "High"),
+    (0.65, 1.0001, "Severe"),
+]
+
+
+def classify_land_stress(score: float) -> str:
+    for lo, hi, label in LAND_STRESS_BREAKS:
+        if lo <= score < hi:
+            return label
+    return "No data"
+
+
+def land_stress_index(ndvi_val: float, ndbi_val: float, w_ndvi: float = 0.6, w_ndbi: float = 0.4) -> dict:
+    """
+    Weighted NDVI + NDBI composite land-degradation-stress score, used in
+    place of a discrete LULC classification (per project direction: skip
+    the rule-based LULC change-matrix in services/lulc.py, weight the two
+    continuous indices directly instead). Higher score = more stressed
+    (less vegetation, more bare/built-up surface).
+
+        score = w_ndvi * (1 - NDVI_norm) + w_ndbi * NDBI_norm
+
+    where NDVI_norm and NDBI_norm are each min-max normalized against
+    typical Kerala Sentinel-2 ranges (see _NDVI_RANGE/_NDBI_RANGE above)
+    and clamped to [0, 1] so an outlier pixel-mean can't blow the score
+    outside its intended 0..1 range.
+
+    Default weights (0.6 NDVI / 0.4 NDBI) treat vegetation loss as the
+    primary drought/degradation signal and NDBI as a secondary,
+    corroborating one -- e.g. helping distinguish "vegetation dropped
+    because of new construction" from "vegetation dropped because of
+    drought stress with no built-up increase". These are a reasonable
+    starting point, not a validated calibration -- pass different
+    w_ndvi/w_ndbi if a different balance is wanted.
+    """
+    def _norm(v, lo, hi):
+        return max(0.0, min(1.0, (v - lo) / (hi - lo)))
+
+    ndvi_norm = _norm(ndvi_val, *_NDVI_RANGE)
+    ndbi_norm = _norm(ndbi_val, *_NDBI_RANGE)
+    score = w_ndvi * (1 - ndvi_norm) + w_ndbi * ndbi_norm
+    return {
+        "score": round(score, 4),
+        "class": classify_land_stress(score),
+        "ndvi_mean": ndvi_val,
+        "ndbi_mean": ndbi_val,
+        "weights": {"ndvi": w_ndvi, "ndbi": w_ndbi},
+    }

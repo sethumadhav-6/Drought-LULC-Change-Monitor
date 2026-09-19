@@ -1,8 +1,9 @@
-# Render deployment blueprint for the Canopy GeoAI backend.
+# Render deployment blueprint for Canopy GeoAI -- the Flask app
+# (flask_app.py), server-rendered, no separate frontend service needed.
 # Deploy: connect this repo in Render -> "New +" -> "Blueprint" -> select this file.
 services:
   - type: web
-    name: canopy-geoai-backend
+    name: canopy-geoai
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
@@ -20,10 +21,18 @@ services:
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
-      - key: ALLOWED_ORIGINS
-        value: '["https://your-app.vercel.app"]'
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      # No MYSQL_* vars set on purpose: Render has no managed MySQL, and
+      # config.py automatically falls back to a SQLite file under
+      # DATA_STORE_DIR when MYSQL_HOST is unset -- which lives on the
+      # persistent disk below, so it survives redeploys. Set MYSQL_HOST/
+      # MYSQL_USER/MYSQL_PASSWORD/MYSQL_DATABASE here instead if you point
+      # this at an external managed MySQL (PlanetScale, AWS RDS, etc.).
       - key: DATA_STORE_DIR
-        value: /var/data/canopy
+        value: /var/data/canopy/data_store
+      - key: WEBGIS_DIR
+        value: /var/data/canopy/webgis
     disk:
       name: canopy-data
       mountPath: /var/data/canopy

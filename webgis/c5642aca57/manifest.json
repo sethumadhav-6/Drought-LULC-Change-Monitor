@@ -1,0 +1,24 @@
+{
+  "publish_id": "c5642aca57",
+  "kind": "analysis_layer",
+  "aoi_name": "Ernakulam",
+  "index_code": "NDDI",
+  "period": "pre",
+  "vis": {
+    "min": -1.0,
+    "max": 1.0,
+    "palette": [
+      "#1a9850",
+      "#ffffbf",
+      "#a50026"
+    ]
+  },
+  "bounds": [
+    9.792560442093336,
+    76.16353728258558,
+    10.294329717386564,
+    76.82726111086204
+  ],
+  "title": "Ernakulam \u2014 NDDI (pre-monsoon)",
+  "published_at": "2026-08-08T08:57:16.666122+00:00"
+}

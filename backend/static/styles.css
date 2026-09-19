@@ -316,6 +316,140 @@ button:hover {
   height: 480px;
   border-radius: 8px;
   overflow: hidden;
+  --map-font-size: 14px;
+  font-size: var(--map-font-size);
+}
+
+.map-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.map-font-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.map-font-control select {
+  width: auto;
+  min-height: 30px;
+  margin-top: 0;
+  padding: 0 6px;
+}
+
+.legend-control {
+  background: rgba(16, 24, 32, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: var(--map-font-size, 0.8rem);
+  max-width: 220px;
+}
+
+.legend-entry {
+  margin-bottom: 8px;
+}
+
+.legend-entry:last-child {
+  margin-bottom: 0;
+}
+
+.legend-ramp {
+  height: 10px;
+  border-radius: 4px;
+  margin: 4px 0 2px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.legend-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.layer-row-wrap {
+  border-bottom: 1px solid var(--line);
+  padding: 4px 0;
+}
+
+.layer-row-wrap:last-child {
+  border-bottom: none;
+}
+
+.layer-row-wrap .layer-row {
+  border-bottom: none;
+  padding: 6px 0 2px;
+}
+
+.layer-customize {
+  margin: 0 0 8px;
+}
+
+.layer-customize summary {
+  cursor: pointer;
+  color: var(--accent-2);
+  font-size: 0.78rem;
+  list-style: none;
+}
+
+.layer-customize summary::-webkit-details-marker {
+  display: none;
+}
+
+.layer-customize .grid-3 {
+  margin-top: 6px;
+}
+
+.layer-customize button {
+  margin-top: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 0.78rem;
+}
+
+.cm-status {
+  margin: 4px 0 0;
+}
+
+.publish-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.publish-row select {
+  width: auto;
+  min-height: 32px;
+  margin-top: 0;
+  padding: 0 6px;
+}
+
+.publish-row button {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 0.78rem;
+}
+
+.publish-status {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  word-break: break-all;
+}
+
+.print-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .results-table {
@@ -346,6 +480,19 @@ button:hover {
 
 .layer-row .checkbox-row {
   gap: 4px;
+}
+
+.opacity-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.opacity-row input[type="range"] {
+  width: 90px;
+  accent-color: var(--accent);
 }
 
 .explain {

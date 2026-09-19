@@ -22,7 +22,16 @@ RELEASED_DIR = DATA_STORE_DIR / "released"
 TIMELAPSE_DIR = DATA_STORE_DIR / "timelapses"
 REPORTS_DIR = DATA_STORE_DIR / "reports"
 
-for _d in (REQUESTS_DIR, RELEASED_DIR, TIMELAPSE_DIR, REPORTS_DIR):
+# Separate from data_store/ on purpose: this is the "publish for web"
+# output directory -- each subfolder is a self-contained, static
+# (no backend/GEE/database dependency at runtime) WebGIS package: a PNG
+# map image, a GeoJSON boundary, and a standalone viewer.html that loads
+# Leaflet from a CDN. Meant to be copied/uploaded as-is to a website (e.g.
+# canopygs.in), not just browsed locally like the rest of data_store/.
+# See app/services/webgis_publish.py.
+WEBGIS_DIR = Path(os.environ.get("WEBGIS_DIR", BACKEND_DIR.parent / "webgis"))
+
+for _d in (REQUESTS_DIR, RELEASED_DIR, TIMELAPSE_DIR, REPORTS_DIR, WEBGIS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 
@@ -82,6 +91,19 @@ class Settings(BaseSettings):
     # district name). Replaces the FAO GAUL / bounding-box placeholders on
     # the Planetary Computer path once present. See core/aoi.py.
     kerala_shapefile_path: str = str(DATA_STORE_DIR / "shapefiles" / "kerala_districts.shp")
+
+    # --- Ancillary layers: DEM (raster) + soil/drainage/geomorphology/
+    # geology (vector shapefiles). Defaults point at the files already in
+    # data_store/ -- override if you keep them somewhere else (any local
+    # path works, e.g. a different drive letter, since the Flask app runs
+    # directly on your machine). Every function in core/ancillary.py
+    # degrades gracefully (returns None/False) if a path doesn't exist.
+    # See docs/ANCILLARY_DATA.md for the schema of each layer. ---
+    dem_path: str | None = str(DATA_STORE_DIR / "dem" / "kl_dem.tif")
+    soil_shapefile_path: str | None = str(DATA_STORE_DIR / "shapefiles" / "soil.shp")
+    drainage_shapefile_path: str | None = str(DATA_STORE_DIR / "shapefiles" / "drainage.shp")
+    geomorphology_shapefile_path: str | None = str(DATA_STORE_DIR / "shapefiles" / "geomorphology.shp")
+    geology_shapefile_path: str | None = str(DATA_STORE_DIR / "shapefiles" / "geology.shp")
 
 
 @lru_cache

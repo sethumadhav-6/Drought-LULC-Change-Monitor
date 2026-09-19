@@ -56,6 +56,12 @@ dependencies:
       - earthengine-api==1.1.2
       - geemap==0.35.1
       - leafmap==0.42.0
+      # folium: builds the "Publish for web" static WebGIS viewer
+      # (services/webgis_publish.py) -- a standalone HTML file with no
+      # Flask/GEE dependency at view time. Already installed transitively
+      # via leafmap/streamlit-folium, pinned explicitly here since it's
+      # now imported directly.
+      - folium==0.20.0
       - pystac-client==0.8.3
       - planetary-computer==1.0.0
       - matplotlib-scalebar==0.8.1
