@@ -169,18 +169,45 @@ the login/session logic.
 ## Status: MVP scope
 
 This build is a **deep, working pipeline for Kerala** — Sentinel-2/Landsat
-access (both backends), the full index + drought (VCI/TCI/VHI/NDDI) + LULC
-change-matrix engine, cartographic timelapse rendering, Excel/spatial report
-export, and a MySQL-backed admin request/approval workflow — with the Flask
-UI wired directly to all of it (the actual GEE/analysis/timelapse logic lives
-in framework-agnostic `services/` modules, called directly by Flask — no HTTP
-layer in between). Left for the next iteration: a supervised (trained) LULC
-classifier in place of the current rule-based thresholds, wiring LULC
-change-matrix output into the UI (the engine exists in `services/lulc.py` but
-isn't yet called from `flask_app.py`), background job handling for very long
-timelapse runs (requests currently block the requesting user's session while
-they run), and extending the AOI catalog to other tropical countries. See
-`docs/DATA_SOURCES.md`.
+access (both backends), the full index + drought (VCI/TCI/VHI/NDDI) engine,
+cartographic timelapse rendering, Excel/spatial report export, and a
+MySQL-backed admin request/approval workflow — with the Flask UI wired
+directly to all of it (the actual GEE/analysis/timelapse logic lives in
+framework-agnostic `services/` modules, called directly by Flask — no HTTP
+layer in between).
+
+**Land-change signal: weighted NDVI+NDBI, not LULC.** `services/lulc.py`'s
+rule-based change-matrix classifier exists in the repo but is deliberately
+*not* wired into the UI — project direction is to skip a discrete LULC
+classification step and instead weight NDVI and NDBI directly
+(`services/drought.py::land_stress_index`, default 0.6 NDVI / 0.4 NDBI,
+adjustable) into a single continuous land-stress score. See that
+function's docstring for the exact formula and reasoning.
+
+**Ancillary layers loaded and shown as context, not yet scored.** DEM +
+soil/drainage/geomorphology/geology (real Kerala datasets, see
+`docs/ANCILLARY_DATA.md`) are loaded and queryable via `GET
+/api/catalog/ancillary?aoi_name=...` (`app/core/ancillary.py`), and the
+dashboard now shows a plain-language "Terrain context" paragraph tying
+them to the index results. They're not yet folded into
+`land_stress_index()`'s numeric score -- that weighting is a methodology
+decision to make deliberately, not guess at.
+
+**"Publish for web" uses folium.** `services/webgis_publish.py` builds
+the standalone WebGIS viewer with
+[folium](https://github.com/python-visualization/folium) (a Leaflet.js
+wrapper that renders server-side to one self-contained HTML file).
+folium's sibling libraries [ipyleaflet](https://github.com/jupyter-widgets/ipyleaflet)
+and [ipywidgets](https://github.com/jupyter-widgets/ipywidgets) need a
+live Jupyter kernel talking to the page over a websocket, so they can't
+produce a static file the way folium does and aren't used in this Flask
+app.
+
+Left for the next iteration: wiring the ancillary layers into scoring,
+background job handling for very long timelapse runs (requests currently
+block the requesting user's session while they run), and extending the
+AOI catalog to other tropical
+countries. See `docs/DATA_SOURCES.md`.
 
 ## Superseded stacks
 
@@ -204,3 +231,5 @@ the work — only the UI layer differs, so fixes made for one apply to all.
 - [`docs/INDEX_LIBRARY.md`](docs/INDEX_LIBRARY.md) — every spectral/drought index implemented, formula + source.
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — hosting the Flask app on your own server, plus the superseded Render/Vercel steps.
 - [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) — Sentinel-2/Landsat collections used, AOI boundary notes, known limitations.
+#   D r o u g h t - L U L C - C h a n g e - M o n i t o r  
+ 
