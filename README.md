@@ -232,4 +232,5 @@ the work — only the UI layer differs, so fixes made for one apply to all.
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — hosting the Flask app on your own server, plus the superseded Render/Vercel steps.
 - [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) — Sentinel-2/Landsat collections used, AOI boundary notes, known limitations.
 #   D r o u g h t - L U L C - C h a n g e - M o n i t o r  
+ #   D r o u g h t - L U L C - C h a n g e - M o n i t o r  
  
