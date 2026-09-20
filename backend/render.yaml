@@ -5,6 +5,13 @@ services:
   - type: web
     name: canopy-geoai
     runtime: docker
+    # This repo's Dockerfile/requirements.txt live under backend/, but
+    # Render resolves dockerfilePath/dockerContext relative to the repo
+    # root by default -- rootDir tells it to treat backend/ as the root
+    # for this service instead (fixes "failed to read dockerfile: open
+    # Dockerfile: no such file or directory" on a repo where render.yaml
+    # isn't at the repo's own top level).
+    rootDir: backend
     dockerfilePath: ./Dockerfile
     dockerContext: .
     plan: starter
