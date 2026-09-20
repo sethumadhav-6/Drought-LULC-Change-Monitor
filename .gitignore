@@ -17,8 +17,8 @@ frontend/.next/
 frontend/out/
 
 # --- Generated data ---
-data_store/*
-!data_store/.gitkeep
+# Keep project data under version control. Large derived artifacts should be
+# stored with Git LFS or an external data store if they outgrow GitHub limits.
 
 # --- OS / editor ---
 .DS_Store
